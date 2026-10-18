@@ -7,5 +7,11 @@ node_modules/
 /playwright/.cache/
 /playwright/.auth/
 
+# Editor
+.vscode/
 
+# OS
+.DS_Store
+
+# Environment Variables
 .env
