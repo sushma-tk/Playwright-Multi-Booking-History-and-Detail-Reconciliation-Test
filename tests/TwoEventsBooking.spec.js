@@ -1,9 +1,8 @@
 const { test, expect } = require("@playwright/test");
 
 // ---------- Test data ----------
-const BASE_URL = "https://eventhub.rahulshettyacademy.com";
-const EMAIL = "*******@gmail.com";
-const PASSWORD = "******@123";
+const EMAIL = process.env.EVENTHUB_EMAIL;
+const PASSWORD = process.env.EVENTHUB_PASSWORD;
 
 const CUSTOMER = {
   name: "Sushma",
@@ -14,7 +13,7 @@ const CUSTOMER = {
 // ---------- Event Booking function ----------
 // Goes to Events catalog, filters, books, and reads details from the confirmation page
 async function createBooking(page,search,category,city,eventTitle,quantity,) {
-  await page.goto(BASE_URL + "/events");
+  await page.goto("/events");
   await page.locator("#event-card").first().waitFor();
   await page.getByPlaceholder("Search events, venues…").fill(search);
   await page.getByRole("combobox").nth(0).selectOption(category);
@@ -31,22 +30,12 @@ async function createBooking(page,search,category,city,eventTitle,quantity,) {
   await page.getByPlaceholder("you@email.com").fill(CUSTOMER.email);
   await page.getByPlaceholder("+91 98765 43210").fill(CUSTOMER.phone);
   await page.locator("button").filter({ hasText: "Confirm Booking" }).click();
-  await expect(
-    page.getByText("Booking Confirmed! 🎉", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("Booking Confirmed! 🎉", { exact: true }),).toBeVisible();
 
   const ref = (await page.locator(".booking-ref").textContent()).trim();
   const title = (await page.locator("h1").textContent()).trim();
-  const tickets = (
-    await page
-      .locator("//span[text()='Tickets']/following-sibling::span")
-      .textContent()
-  ).trim();
-  const total = (
-    await page
-      .locator("//span[text()='Total']/following-sibling::span")
-      .textContent()
-  ).trim();
+  const tickets = (await page.locator("//span[text()='Tickets']/following-sibling::span").textContent()).trim();
+  const total = (await page.locator("//span[text()='Total']/following-sibling::span").textContent()).trim();
   const email = CUSTOMER.email;
   console.log("Booking details:", { ref, title, tickets, total, email });
 
@@ -55,7 +44,7 @@ async function createBooking(page,search,category,city,eventTitle,quantity,) {
 
 test("Two bookings - verify by booking reference", async ({ page }) => {
   // Login ONCE for the whole session
-  await page.goto(BASE_URL + "/login");
+  await page.goto("/login");
   await page.getByPlaceholder("you@email.com").fill(EMAIL);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign In" }).click();
@@ -92,68 +81,42 @@ test("Two bookings - verify by booking reference", async ({ page }) => {
   expect(booking2.title).not.toBe(booking1.title);
   expect(booking2.tickets).toContain("2");
 
-  // My Bookings - find both cards by reference text
+  const bookings = [booking1, booking2];
+ 
+  // My Bookings - check each booking card: visible, confirmed, title, tickets, total
   await page.locator("#nav-bookings").click();
-  const card1 = page.locator("#booking-card").filter({ hasText: booking1.ref });
-  const card2 = page.locator("#booking-card").filter({ hasText: booking2.ref });
-
-  // Card 1 - booking1.ref - visible, confirmed, title, tickets, total
-  await expect(card1).toBeVisible();
-  await expect(card1).toContainText("confirmed");
-  await expect(card1).toContainText(booking1.title);
-  await expect(card1).toContainText(`${booking1.tickets} ticket`);
-  await expect(card1).toContainText(booking1.total);
-
-  // Card 2 - booking2.ref - visible, confirmed, title, tickets, total
-  await expect(card2).toBeVisible();
-  await expect(card2).toContainText("confirmed");
-  await expect(card2).toContainText(booking2.title);
-  await expect(card2).toContainText(`${booking2.tickets} ticket`);
-  await expect(card2).toContainText(booking2.total);
-
-  // First booking detail page
-  await card1.getByText("View Details").click();
-  await expect(page.locator("main nav")).toContainText(booking1.ref); // breadcrumb reference                    // header reference
-  await expect(
-    page.getByRole("heading", { name: booking1.title }),
-  ).toBeVisible(); // event title
-  await expect(page.getByText(booking1.email)).toBeVisible(); // customer email
-
-  const summary1 = page.getByText("Payment Summary").locator("..");
-  const tickets1 = summary1.locator(
-    "xpath=.//span[text()='Tickets']/following-sibling::span",
-  );
-  await expect(tickets1).toHaveText(booking1.tickets); // tickets
-  await expect(summary1).toContainText(booking1.total); // total
-
-  // numeric booking id from the detail page
-  const idText = await page
-    .locator("//span[text()='Booking ID']/following-sibling::span")
-    .textContent();
-  const bookingId1 = idText.replace("#", "").trim();
-  expect(bookingId1).toMatch(/^\d+$/); // numeric booking id
-
-  await expect(page.getByText(booking2.ref)).toHaveCount(0); // no mix-up
-  await expect(page.getByText(booking2.title)).toHaveCount(0);
-
-  // Back to My Bookings, re-find second booking by reference, open detail
-  await page.locator("#nav-bookings").click();
-  await page
-    .locator("#booking-card")
-    .filter({ hasText: booking2.ref })
-    .getByText("View Details")
-    .click();
-  await expect(page.locator("main nav")).toContainText(booking2.ref); // breadcrumb reference
-  await expect(
-    page.getByRole("heading", { name: booking2.title }),
-  ).toBeVisible(); // event title
-  const summary2 = page.getByText("Payment Summary").locator("..");
-  const tickets2 = summary2.locator(
-    "xpath=.//span[text()='Tickets']/following-sibling::span",
-  );
-  await expect(tickets2).toHaveText("2"); // tickets = 2
-  await expect(summary2).toContainText(booking2.total); // total
-
-  await expect(page.getByText(booking1.ref)).toHaveCount(0); // no mix-up
-  await expect(page.getByText(booking1.title)).toHaveCount(0);
+  for (const booking of bookings) {
+    const card = page.locator("#booking-card").filter({ hasText: booking.ref });
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("confirmed");
+    await expect(card).toContainText(booking.title);
+    await expect(card).toContainText(`${booking.tickets} ticket`);
+    await expect(card).toContainText(booking.total);
+  }
+ 
+  // Detail page - open each booking from My Bookings and verify it
+  for (const booking of bookings) {
+    const otherBooking = bookings.find((b) => b !== booking);
+ 
+    await page.locator("#nav-bookings").click();
+    await page.locator("#booking-card").filter({ hasText: booking.ref }).getByText("View Details").click();
+ 
+    await expect(page.locator("main nav")).toContainText(booking.ref); // breadcrumb reference
+    await expect(page.getByRole("heading", { name: booking.title }),).toBeVisible(); // event title
+    await expect(page.getByText(booking.email)).toBeVisible(); // customer email
+ 
+    const summary = page.getByText("Payment Summary").locator("..");
+    const tickets = summary.locator("xpath=.//span[text()='Tickets']/following-sibling::span",);
+    await expect(tickets).toHaveText(booking.tickets); // tickets
+    await expect(summary).toContainText(booking.total); // total
+ 
+    // numeric booking id from the detail page
+    const idText = await page.locator("//span[text()='Booking ID']/following-sibling::span").textContent();
+    const bookingId = idText.replace("#", "").trim();
+    expect(bookingId).toMatch(/^\d+$/); // numeric booking id
+ 
+    await expect(page.getByText(otherBooking.ref)).toHaveCount(0); // no mix-up
+    await expect(page.getByText(otherBooking.title)).toHaveCount(0);
+  }
 });
+ 
